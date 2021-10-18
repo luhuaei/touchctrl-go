@@ -4,6 +4,7 @@ with lib;
 
 let
   cfg = config.services.touchctrl;
+  touchctrl-go = pkgs.callPackage ./. { };
 in
 {
   options = {
@@ -23,12 +24,12 @@ in
       wantedBy = [ "multi-user.target" ];
 
       serviceConfig = {
-        User = "nobody";
+        User = "root";
         NoNewPrivileges = true;
-        ExecStart = "${pkgs.touchctrl-go}/bin/touchctrl";
+        ExecStart = "${touchctrl-go}/bin/touchctrl";
       };
     };
 
-    environment.systemPackages = [ pkgs.touchctrl-go ];
+    environment.systemPackages = [ touchctrl-go ];
   };
 }
