@@ -14,6 +14,16 @@ in
         type = types.bool;
         description = "Whether to run touchctrl server.";
       };
+      touchpad = mkOption {
+        type = types.path;
+        default = "/dev/input/event14";
+        description = ''touchpad device path'';
+      };
+      keyboard = mkOption {
+        type = types.path;
+        default = "/dev/input/event0";
+        description = ''keyboard device path'';
+      };
     };
   };
 
@@ -26,7 +36,7 @@ in
       serviceConfig = {
         User = "root";
         NoNewPrivileges = true;
-        ExecStart = "${touchctrl-go}/bin/touchctrl";
+        ExecStart = "${touchctrl-go}/bin/touchctrl -keyboard ${cfg.keyboard} -touchpad ${cfg.touchpad}";
       };
     };
 
