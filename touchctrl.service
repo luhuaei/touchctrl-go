@@ -1,0 +1,11 @@
+[Unit]
+Description=Use trouchpad press left ctrl
+After=network.target syslog.target
+
+[Service]
+User=root
+NoNewPrivileges=true
+ExecStart=/usr/bin/touchctrl
+
+[Install]
+WantedBy=multi-user.target

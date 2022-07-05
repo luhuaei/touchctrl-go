@@ -1,13 +1,44 @@
 package main
 
-import "flag"
+import (
+	"fmt"
+	"path/filepath"
+	"regexp"
+
+	evdev "github.com/gvalkov/golang-evdev"
+)
 
 func main() {
-	tpath := flag.String("touchpad", "/dev/input/event14", "touchpad device path")
-	kpath := flag.String("keyboard", "/dev/input/event0", "keyboard device path")
+	events, err := filepath.Glob("/dev/input/event*")
+	if err != nil {
+		panic(err)
+	}
 
-	flag.Parse()
-	m, err := NewManager(*tpath, *kpath)
+	Rtouchpad := regexp.MustCompile("(?i)Touchpad")
+	RKeyboard := regexp.MustCompile("(?i)keyboard")
+
+	var tpath string
+	var kpath string
+	for _, eventFile := range events {
+		device, err := evdev.Open(eventFile)
+		if err != nil {
+			fmt.Println("Error: ", err)
+			continue
+		}
+		if Rtouchpad.MatchString(device.Name) {
+			tpath = eventFile
+		}
+		if RKeyboard.MatchString(device.Name) {
+			kpath = eventFile
+		}
+		device.File.Close()
+	}
+
+	if tpath == "" || kpath == "" {
+		panic("not found touchpad or keyboard device")
+	}
+
+	m, err := NewManager(tpath, kpath)
 	if err != nil {
 		panic(err)
 	}
