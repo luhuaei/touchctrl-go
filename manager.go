@@ -72,6 +72,8 @@ func (m *manager) worker() error {
 }
 
 func (m *manager) touchpadWorker(ctx context.Context) error {
+	var preX int32
+	var preY int32
 	for {
 		select {
 		case <-ctx.Done():
@@ -90,8 +92,10 @@ func (m *manager) touchpadWorker(ctx context.Context) error {
 			var touch bool
 			var finger bool
 			var found bool
+			currX := preX
+			currY := preY
 			for _, e := range es {
-				if e.Type != evdev.EV_KEY {
+				if e.Type != evdev.EV_KEY && e.Type != evdev.EV_ABS {
 					continue
 				}
 
@@ -102,17 +106,33 @@ func (m *manager) touchpadWorker(ctx context.Context) error {
 				case evdev.BTN_TOOL_FINGER:
 					found = true
 					finger = e.Value == int32(1)
+				case evdev.ABS_X:
+					currX = e.Value
+				case evdev.ABS_Y:
+					currY = e.Value
 				}
 			}
 
 			if found {
 				if touch && finger {
 					err = m.output.KeyDown(uinput.KeyLeftctrl)
+					preX, preY = currX, currY
 				} else {
 					err = m.output.KeyUp(uinput.KeyLeftctrl)
+					preX, preY = int32(0), int32(0)
 				}
 				if err != nil {
 					return err
+				}
+			}
+
+			if preX != 0 && preY != 0 {
+				if isMove(preX, preY, currX, currY) {
+					err := m.output.KeyUp(uinput.KeyLeftctrl)
+					if err != nil {
+						return err
+					}
+					preX, preY = int32(0), int32(0)
 				}
 			}
 		}
@@ -137,4 +157,10 @@ func (m *manager) keyboardWorker(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func isMove(preX, preY, currX, currY int32) bool {
+	x := preX - currX
+	y := preY - currY
+	return x*x+y*y >= 900
 }
