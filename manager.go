@@ -2,9 +2,40 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/bendahl/uinput"
 	evdev "github.com/gvalkov/golang-evdev"
+)
+
+type Point struct {
+	X int32
+	Y int32
+}
+
+func (p Point) String() string {
+	return fmt.Sprintf("Point X: %d Y: %d\n", p.X, p.Y)
+}
+
+type Rect struct {
+	TopLeft     Point
+	RightBottom Point
+}
+
+func (r Rect) Contains(p Point) bool {
+	return p.X >= r.TopLeft.X && p.X <= r.RightBottom.X && p.Y >= r.TopLeft.Y && p.Y <= r.RightBottom.Y
+}
+
+var (
+	// touch area absolute position
+	LeftRect = Rect{
+		TopLeft:     Point{X: 1, Y: 1},
+		RightBottom: Point{X: 250, Y: 250},
+	}
+	RightRect = Rect{
+		TopLeft:     Point{X: 1000, Y: 1},
+		RightBottom: Point{X: 1500, Y: 250},
+	}
 )
 
 type manager struct {
@@ -72,8 +103,7 @@ func (m *manager) worker() error {
 }
 
 func (m *manager) touchpadWorker(ctx context.Context) error {
-	var preX int32
-	var preY int32
+	var press bool
 	for {
 		select {
 		case <-ctx.Done():
@@ -89,11 +119,10 @@ func (m *manager) touchpadWorker(ctx context.Context) error {
 				continue
 			}
 
+			var action bool
 			var touch bool
 			var finger bool
-			var found bool
-			currX := preX
-			currY := preY
+			var point Point
 			for _, e := range es {
 				if e.Type != evdev.EV_KEY && e.Type != evdev.EV_ABS {
 					continue
@@ -101,39 +130,40 @@ func (m *manager) touchpadWorker(ctx context.Context) error {
 
 				switch e.Code {
 				case evdev.BTN_TOUCH:
-					found = true
+					action = true
 					touch = e.Value == int32(1)
 				case evdev.BTN_TOOL_FINGER:
-					found = true
+					action = true
 					finger = e.Value == int32(1)
 				case evdev.ABS_X:
-					currX = e.Value
+					point.X = e.Value
 				case evdev.ABS_Y:
-					currY = e.Value
+					point.Y = e.Value
 				}
 			}
 
-			if found {
+			// 如果没有发生 press 和 up 事件则跳过
+			if !action {
+				continue
+			}
+
+			// 如果发生的事件处于热区内，则判断事件是 press 还是 up
+			if LeftRect.Contains(point) || RightRect.Contains(point) {
 				if touch && finger {
 					err = m.output.KeyDown(uinput.KeyLeftctrl)
-					preX, preY = currX, currY
+					press = true
 				} else {
 					err = m.output.KeyUp(uinput.KeyLeftctrl)
-					preX, preY = int32(0), int32(0)
+					press = false
 				}
-				if err != nil {
-					return err
-				}
+			} else if press {
+				// 如果处于 press 状态，则释放
+				err = m.output.KeyUp(uinput.KeyLeftctrl)
+				press = false
 			}
 
-			if preX != 0 && preY != 0 {
-				if isMove(preX, preY, currX, currY) {
-					err := m.output.KeyUp(uinput.KeyLeftctrl)
-					if err != nil {
-						return err
-					}
-					preX, preY = int32(0), int32(0)
-				}
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -157,10 +187,4 @@ func (m *manager) keyboardWorker(ctx context.Context) error {
 			}
 		}
 	}
-}
-
-func isMove(preX, preY, currX, currY int32) bool {
-	x := preX - currX
-	y := preY - currY
-	return x*x+y*y >= 900
 }
